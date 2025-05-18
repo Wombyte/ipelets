@@ -6,26 +6,6 @@ A set of helper ipelets
 
 revertOriginal = _G.revertOriginal
 
-function connectDots(model)
-	local page = model:page()
-	-- check selection
-	local marks = {}
-	for i,obj,sel,layer in page:objects() do
-		if obj:symbol():sub(1,5) == "mark/" and sel ~= nil then
-			marks[#marks + 1] = obj:matrix() * obj:position()
-		end
-	end
-	if #marks ~= 2 then 
-		model:warning("Please select exactly two marks.")
-		return
-	end
-	-- create connection
-	local seg = { type="curve", closed=true }
-	seg[1] = { type="segment", marks[1], marks[2] }
-	local edge = ipe.Path(model.attributes, { seg } )
-	model:creation("create Edge", edge)
-end
-
 function splitStringByBackslash(inputString, model)
     local lines = {}
     for line in inputString:gmatch("([^\n]*)\n?") do
@@ -65,6 +45,8 @@ function splitText(model)
 		return
 	end
 
+	local mathMode = string.find(page[prim]:xml(), "style=\"math\"")
+
 	local origText = page[prim]
 	local lines = splitStringByBackslash(origText:text(), model)
 
@@ -76,6 +58,7 @@ function splitText(model)
 		lines = lines,
 		textObjNum = prim,
 	    undo = _G.revertOriginal,
+		mathMode = mathMode
 	}
    	t.redo = function (t, doc)
 		local page = doc[t.pno]
@@ -85,7 +68,14 @@ function splitText(model)
 		local pos = matrix * origText:position()
 		local layer = page.layerOf(page, t.textObjNum)
       	for i,line in ipairs(lines) do
-			local text = ipe.Text(attr, line, ipe.Vector(pos.x,pos.y))
+			local content = line
+			if t.mathMode then
+				content = "$" .. line .. "$"
+			end
+			local text = ipe.Text(attr, content, ipe.Vector(pos.x,pos.y))
+			if attr["minipage"] == true then
+				text = ipe.Text(attr, content, ipe.Vector(pos.x,pos.y), attr["width"])
+			end
 			local transMat = ipe.Translation(i * 16, - i * 16)
 			text:setMatrix(matrix * transMat)
 			page:insert(nil, text, 1, layer)
